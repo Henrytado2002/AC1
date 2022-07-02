@@ -1,0 +1,344 @@
+.globl main
+
+.data    
+buffer_image_rgb: .space 786432
+buffer_image_gray: .space 262144
+rgb_path: .asciz "C:/Users/Henrique/Desktop/uni/arquitetura/lenna.rgb"
+gray_path: .asciz "C:/Users/Henrique/Desktop/uni/arquitetura/lenna.gray"
+sobel_h_path: .asciz "C:/Users/Henrique/Desktop/uni/arquitetura/lenna_sobel_h.gray"
+sobel_v_path: .asciz "C:/Users/Henrique/Desktop/uni/arquitetura/lenna_sobel_v.gray"
+final_path: .asciz "C:/Users/Henrique/Desktop/uni/arquitetura/final.gray"
+sobel_h: .byte 1,0,-1,2,0,-2, 1,0,-1
+sobel_v: .byte 1,2,1,0,0,0,-1,-2,-1
+buffer_sobel_h: .space 262144
+buffer_sobel_v: .space 262144
+buffer_final: .space 262144
+
+.text
+
+################################################################################################################################
+# Função: read_rgb_image
+# Descrição: esta função abre o ficheiro especificado no enderço guardado em a1
+# Argumentos: 
+#     a0- endereço do ficheiro rgb (string)
+#     a1- endereço do buffer da imagem rgb
+# Retorna: 
+#	a0 - endereço do buffer da imagem (agora com o conteudo da do ficheiro) 
+################################################################################################################################
+
+read_rgb_image:
+  	addi sp, sp, -4
+  	sw s5, 0(sp)
+  	mv   s5, a1
+  	li   a7, 1024     # sys_call para abrir o ficheiro    
+  	li   a1, 0        
+  	ecall
+  	mv a1, s5             
+  	li   a7, 63       # sys_call para ler a partir do ficheiro
+  	li   a2, 786432   # buffer length
+  	ecall             
+  	li   a7, 57       # sys_call para fechar o ficheiro        
+  	ecall
+  	lw s5, 0(sp)
+  	addi sp, sp, 4               
+  	ret
+  
+################################################################################################################################
+# Funcao: rgb_to_gray
+# Descricao: Esta funcao converte uma imagem de RGB para gray
+# Argumentos: 
+#	a0 - buffer da imagem rgb
+#	a1 - buffer da imagem gray 
+#	a2 - tamnho do buffer
+# Retorna: 
+#     N/A
+################################################################################################################################
+
+rgb_to_gray:
+	# I = 0.30R + 0.59G + 0.11B
+	# 0.30=30/100, logo t3 vai ter o valor 100 para dividir.
+	addi sp, sp, -12
+	sw s0, 0(sp)
+	sw s1, 4(sp)
+	sw s2, 8(sp)
+	li s0, 30    #R
+      li s1, 59    #G
+      li s2, 11    #B
+      li s3, 100   #divisor
+      
+branch_gray:
+   	# Red
+     	lbu t0, 0(a0)
+      mul t0, t0, s0
+      # Green
+      lbu t1, 1(a0)
+      mul t1, t1, s1
+      # Blue
+      lbu t2, 2(a0)
+      mul t2, t2, s2
+      # Gray
+      add t0, t0, t1
+      add t0, t0, t2
+      div t0, t0, s3
+      # Guardar os valores da conversão de gray no array
+      sb t0, 0(a1)    
+      # Avançar no array
+      addi a1, a1, 1    
+      addi a0, a0, 3
+      addi a2, a2, -3
+      bnez a2, branch_gray
+      mv a0, a1
+	lw s0, 0(sp)
+	lw s1, 4(sp)
+	lw s2, 8(sp)
+	addi sp, sp, 12
+      ret
+
+#####################################################################################################################
+# Função: write_gray_image
+# Descrição: Esta funcao cria um ficheiro do tipo GRAY, no qual vai guardar a imagem convertida para GRAY scale.
+# Argumentos: 
+#	a0- endereço de onde queremos que o ficheiro fique, com o nome incluido
+#	a1- endereço do buffer da imagem em gray
+#	a2- comprimento do buffer
+# Retorna: 
+#	a0 - adress do ficheiro 
+#####################################################################################################################
+
+write_gray_image:
+  li   a7, 1024     # sys_call para abrir um ficheiro
+  li   a1, 1        
+  ecall             
+  mv   s6, a0       
+  li   a7, 64       # sys_call para escrever num ficheiro
+  mv   a0, s6       
+  la   a1, buffer_image_gray   
+  li   a2, 262144      
+  ecall            
+  li   a7, 57       # sys_call para fechar o ficheiro
+  mv   a0, s6       
+  ecall            
+  ret
+ 
+#####################################################################################################################
+# Funcao: load_sobel_h
+# Descricao: Esta função carrega os valores do operador de sobel horizontal para os registos S, utilizados na função convolution
+# Argumentos: 
+#	a1 - buffer com o operador de sobel
+# Retorna: 
+#	N/A
+#####################################################################################################################
+
+load_sobel_h:  
+	lbu s0, 0(a1)
+	lbu s1, 1(a1)
+	lbu s2, 2(a1)
+	lbu s3, 3(a1)
+	lbu s4, 4(a1)
+	lbu s5, 5(a1)
+	lbu s6, 6(a1)
+	lbu s7, 7(a1)
+	lbu s8, 8(a1)
+	li a3, 262144
+	ret
+
+
+#####################################################################################################################
+# Funcao: load_sobel_v
+# Descricao: Esta função carrega os valores do operador de sobel vertical para os registos S, utilizados na função convolution
+# Argumentos: 
+#	a1 - buffer com o operador de sobel
+# Retorna: 
+#	N/A
+#####################################################################################################################
+load_sobel_v:  
+	lbu s0, 0(a1)
+	lbu s1, 1(a1)
+	lbu s2, 2(a1)
+	lbu s3, 3(a1)
+	lbu s4, 4(a1)
+	lbu s5, 5(a1)
+	lbu s6, 6(a1)
+	lbu s7, 7(a1)
+	lbu s8, 8(a1)
+	li a3, 262144
+	ret
+
+#####################################################################################################################
+# Funcao: convolution
+# Descricao: Esta função vai fazer a convolução da imagem gray com o operador de sobel, de acordo com o enunciado
+# Argumentos: 
+#	a0 - buffer com a imagem gray
+#	a2 - buffer no qual vai ser guardada a imagem após a convolução
+# Retorna: 
+#	N/A
+#####################################################################################################################
+
+convolution:
+	# primeira linha da matriz
+	lbu t0, 0(a0)
+	lbu t1, 1(a0)	# carregar os valores da imagem correspondentes á matriz
+	lbu t2, 2(a0)
+	mul t0, t0, s8
+	mul t1, t1, s7	#multiplicar os valores da imagem pelos valores do operador de sobel
+	mul t2, t2, s6
+	add t0, t0, t1	# somar os valores
+	add t0, t0, t2	 
+	mv t3, t0 		# guardar o valor de t0 em t3, para podermos usar o mesmo troço de código para as outras partes
+	
+	# as outras linhas são análogas á primeira
+	
+	# segunda linha da matriz
+	lbu t0, 512(a0)
+	lbu t1, 513(a0)
+	lbu t2, 514 (a0)
+	mul t0, t0, s5
+	mul t1, t1, s4
+	mul t2, t2, s3
+	add t0, t0, t1
+	add t0, t0, t2	
+	mv t4, t0
+	
+	# terceira linha da matriz
+	lbu t0, 1024(a0)
+	lbu t1, 1025(a0)
+	lbu t2, 1026(a0)
+	mul t0, t0, s2
+	mul t1, t1, s1
+	mul t2, t2, s0
+	add t0, t0, t1
+	add t0, t0, t2
+	mv t5, t0	
+	
+	add t3, t3, t4 	# somar os resultados
+	add t3, t3, t5
+	sb t3, 0(a2)	# guardar a soma no buffer
+	
+	# avançar no array
+	addi a0, a0, 1
+	addi a2, a2, 1
+	addi a3, a3, -1
+	bnez a3, convolution
+	ret
+	
+	
+#####################################################################################################################
+# Funcao: write_gray
+# Descricao: Esta função vai criar uma imagem do tipo gray, de acordo com os argumentos
+# Argumentos:
+# 	a0 - caminho do lugar onde queremos criar a imagem
+#	a1 - buffer a parir do qual queremos escrever
+# Retorna: 
+#	cria a imagem
+#####################################################################################################################	
+
+write_gray:
+  	addi sp, sp, -4
+  	sw s5, 0(sp)
+  	mv   s5, a1
+  	li   a7, 1024     # sys_call para abrir um ficheiro
+ 	li   a1, 1      
+  	ecall            
+  	mv   s6, a0      
+  	li   a7, 64       # sys_call para escrever no ficheiro   
+  	li   a2, 262144   # buffer length
+  	mv   a1, s5
+  	ecall             
+  	li   a7, 57       # sys_call para fechar o ficheiro
+  	mv   a0, s6       
+  	ecall 
+  	lw s5, 0(sp)
+  	addi sp, sp, 4            
+  	ret
+  	
+  	
+#####################################################################################################################
+# Funcao: contour
+# Descricao: Esta função vai unir, de acordo com o enunciado, as duas imagens geradas pela função convolution, de modo a criar uma imagem com os contornos
+# Argumentos:
+# 	a0 - buffer da imagem sobel (imagem gray, pós convolução) horizontal
+#	a1 - buffer da imagem sobel (imagem gray, pós convolução) vertical 
+# 	a3 - tamanho do buffer
+#	a4 - buffer da imagem final
+# Retorna: 
+#	cria a imagem final
+#####################################################################################################################
+contour: 
+	addi sp, sp, -4
+	li t2, -1 # t3=-1, para multiplicar, para obter o efeito de valor absoluto
+	li t3, 4
+	li t4, 2
+	
+branch_contour:
+	lb t0, 0(a0)
+	lb t1, 0(a1)
+	bgez t0, conti_1
+	mul t0, t0, t2 # só é executado se t0<0
+conti_1:
+	bgez t1, conti_2
+	mul t1, t1, t2 # só é executado se t1<0
+conti_2:
+	div t0, t0, t3
+	div t1, t1, t3
+	add t0, t0, t1
+	div t0, t0, t4
+	sb t0, 0(a4)
+	
+	#avançar os vetores
+	addi a0, a0, 1
+	addi a1, a1, 1
+	addi a4, a4, 1
+	addi a3, a3, -1
+	bnez a3, branch_contour
+  	ret 
+  	
+################################################################  
+main:
+	la a0, rgb_path 
+	la a1, buffer_image_rgb
+	jal read_rgb_image
+	
+	la a0, buffer_image_rgb
+	la a1, buffer_image_gray
+	li a2, 786432
+	jal rgb_to_gray 
+	
+	la a0, gray_path
+  	la a1, buffer_image_gray 
+  	li a2, 262144 
+	jal write_gray_image
+	
+	la a1, sobel_h
+	jal load_sobel_h
+	
+	la a0, buffer_image_gray
+	la a2, buffer_sobel_h
+	jal convolution
+	
+	la a0, sobel_h_path
+	la a1, buffer_sobel_h
+	jal write_gray
+	
+	la a1, sobel_v
+	jal load_sobel_v
+	
+	la a0, buffer_image_gray
+	la a2, buffer_sobel_v
+	jal convolution
+	
+	la a0, sobel_v_path 
+	la a1, buffer_sobel_v
+	jal write_gray
+	
+	la a0, buffer_sobel_h
+	la a1, buffer_sobel_v
+	li a3, 262144
+	la a4, buffer_final
+	jal contour
+	
+	la a0, final_path
+	la a1, buffer_final
+	li a3, 262144
+	jal write_gray
+	
+  
